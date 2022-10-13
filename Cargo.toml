@@ -11,7 +11,7 @@ tokio = { version = "*", features = ["full"] }
 neo4rs = "*"
 lazy_static = "*"
 serde_json = "*"
-serde = "*"
+serde = { version = "*", features = ["derive"] }
 axum-macros = "*"
 
 [dependencies.uuid]
