@@ -1,5 +1,6 @@
 use axum::{routing::get, Router};
 use handler::get_error;
+use std::env;
 
 mod db;
 mod err;
@@ -11,6 +12,9 @@ use err::AppError;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    env::set_var("RUST_LOG", "info");
+    env_logger::init();
+
     let app = Router::new()
         .route("/", get(query_neo4j))
         .route("/error", get(get_error));

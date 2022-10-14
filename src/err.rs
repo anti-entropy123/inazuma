@@ -1,33 +1,43 @@
 use axum::{response::IntoResponse, Json};
+use derive_more::Display;
+use log::info;
 use std::error::Error;
 
 use crate::resp::Neo4jResp;
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum AppErrorType {
     Ok,
-    TestErr,
+    #[display(fmt = "DefaultErr")]
+    DefaultErr,
+    #[display(fmt = "Neo4jErr")]
     Neo4jErr,
 }
 
 #[derive(Debug)]
 pub struct AppError {
     errortype: AppErrorType,
+    msg: String,
 }
 
 impl AppError {
     pub fn code(&self) -> i32 {
-        return self.errortype as i32;
+        self.errortype as i32
     }
 
-    pub fn new(errortype: AppErrorType) -> Self {
-        return Self { errortype };
+    pub fn msg(&self) -> String {
+        format!("{}:{}", self.errortype, self.msg)
+    }
+
+    pub fn new(errortype: AppErrorType, msg: String) -> Self {
+        Self { errortype, msg }
     }
 }
 
 impl From<neo4rs::Error> for AppError {
-    fn from(_: neo4rs::Error) -> Self {
-        return Self::new(AppErrorType::Neo4jErr);
+    fn from(e: neo4rs::Error) -> Self {
+        info!("AppError from e=neo4rs::Error({:?})", e);
+        return Self::new(AppErrorType::Neo4jErr, format!("neo4rs::Error({:?})", e));
     }
 }
 

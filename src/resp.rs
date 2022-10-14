@@ -18,7 +18,7 @@ where
     }
 
     pub fn from_error(error: AppError) -> Neo4jResp<()> {
-        Neo4jResp::new(error.code(), String::new(), None)
+        Neo4jResp::new(error.code(), error.msg(), None)
     }
 }
 
@@ -35,6 +35,6 @@ where
     )))
 }
 
-pub fn resp_err(errortype: AppErrorType) -> JsonResult<()> {
-    Err(AppError::new(errortype))
+pub fn resp_err(errortype: AppErrorType, msg: String) -> JsonResult<()> {
+    Err(AppError::new(errortype, msg))
 }
