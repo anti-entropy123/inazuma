@@ -13,6 +13,10 @@ lazy_static = "*"
 serde_json = "*"
 serde = { version = "*", features = ["derive"] }
 axum-macros = "*"
+log = "*"
+env_logger = "*"
+derive_more = "*"
+tower-http = { version = "*", features = ["cors"] }
 
 [dependencies.uuid]
 version = "1.2.1"

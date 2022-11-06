@@ -35,6 +35,9 @@ where
     )))
 }
 
-pub fn resp_err(errortype: AppErrorType, msg: String) -> JsonResult<()> {
+pub fn resp_err<T>(errortype: AppErrorType, msg: String) -> JsonResult<T>
+where
+    T: Serialize,
+{
     Err(AppError::new(errortype, msg))
 }
