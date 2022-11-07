@@ -1,13 +1,14 @@
 use axum::extract::Query;
 use log::{error, info};
-use neo4rs::{query, Node, Relation, UnboundedRelation};
+use neo4rs::Node;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::option::IntoIter;
 
-use crate::db::get_graph_connect;
-use crate::err::AppErrorType;
-use crate::resp::{resp_err, resp_ok, JsonResult};
+use crate::{
+    db::{get_related_protein_by_name, is_related_proteins, neo4j_query_test},
+    err::AppErrorType,
+    resp::{resp_err, resp_ok, JsonResult},
+};
 
 #[derive(Serialize, Deserialize)]
 pub struct ProteinResp {
@@ -30,16 +31,12 @@ fn get_protein_id_and_name(node: &Node) -> (i32, String) {
 
 pub async fn query_protein_by_name(Query(args): Query<ProteinArgs>) -> JsonResult<ProteinResp> {
     log::debug!("/protein, args={:?}", args);
-    let limit = match args.limit {
+    let limit: i32 = match args.limit {
         Some(limit) => limit,
         None => 10,
-    }
-    .to_string();
+    };
 
-    let cyper = format!("MATCH (n1:owl__Class) -[r*2]- (n2:owl__Class{{rdfs__label:'{}'}}) Return n1, n2, r Limit {} ;", args.name, limit);
-    log::debug!("qeury semantic={}", cyper);
-    let graph = get_graph_connect().await?;
-    let mut result = graph.execute(query(&cyper)).await?;
+    let mut result = get_related_protein_by_name(args.name, limit).await?;
 
     let mut proteins = HashMap::<i32, String>::new();
     let mut rels = Vec::<(i32, i32)>::new();
@@ -55,8 +52,7 @@ pub async fn query_protein_by_name(Query(args): Query<ProteinArgs>) -> JsonResul
             if n1.0 <= n2.0 {
                 continue;
             }
-            let mut result = graph.execute(query(&format!("MATCH (n1:owl__Class{{rdfs__label:'{}'}}) <-[r1]- () -[r2]-> (n2:owl__Class{{rdfs__label:'{}'}}) Return *; ", n1.1, n2.1))).await?;
-            if let Some(_) = result.next().await? {
+            if is_related_proteins(n1.1, n2.1).await? {
                 rels.push((*n1.0, *n2.0))
             }
         }
@@ -69,10 +65,7 @@ pub async fn query_protein_by_name(Query(args): Query<ProteinArgs>) -> JsonResul
 }
 
 pub async fn query_neo4j() -> JsonResult<Vec<String>> {
-    let graph = get_graph_connect().await?;
-    let mut result = graph
-        .execute(query("MATCH (n:Resource) RETURN n LIMIT 25"))
-        .await?;
+    let mut result = neo4j_query_test().await?;
 
     let mut resp: Vec<String> = Vec::new();
     while let Some(row) = result.next().await? {
