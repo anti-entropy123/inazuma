@@ -41,6 +41,14 @@ pub async fn is_related_proteins(protein1: &String, protein2: &String) -> Result
     Ok(result.next().await?.is_some())
 }
 
+pub async fn get_protein_path_by_score(score: i32, limit: i32) -> Result<RowStream, AppError> {
+    let cyper = format!("MATCH p=(n1:owl__Class)<-- (score) -->(n2:owl__Class) where toInteger(score.ns4__SWO_0000425) > {} and n1.rdfs__comment <> n2.rdfs__comment RETURN p liMIT {}", score, limit);
+    log::debug!("get_protein_path_by_score qeury sentence={}", cyper);
+    let graph = get_graph_connect().await?;
+    let result = graph.execute(query(&cyper)).await?;
+    Ok(result)
+}
+
 pub async fn neo4j_query_test() -> Result<RowStream, AppError> {
     let cyper = format!("MATCH (n:Resource) RETURN n LIMIT 25");
     log::debug!("neo4j_query_test qeury sentence={}", cyper);

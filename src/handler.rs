@@ -1,11 +1,14 @@
 use axum::extract::Query;
 use log::{error, info};
-use neo4rs::Node;
+use neo4rs::{Node, Path};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
-    db::{get_related_protein_by_name, is_related_proteins, neo4j_query_test},
+    db::{
+        get_protein_path_by_score, get_related_protein_by_name, is_related_proteins,
+        neo4j_query_test,
+    },
     err::AppErrorType,
     resp::{resp_err, resp_ok, JsonResult},
 };
@@ -14,6 +17,19 @@ use crate::{
 pub struct ProteinResp {
     protein_names: HashMap<i32, String>,
     relate: Vec<(i32, i32)>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Interact {
+    node1: i32,
+    node2: i32,
+    score: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ProteinPathResp {
+    protein_names: HashMap<i32, String>,
+    rels: Vec<Interact>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -31,10 +47,7 @@ fn get_protein_id_and_name(node: &Node) -> (i32, String) {
 
 pub async fn query_protein_by_name(Query(args): Query<ProteinArgs>) -> JsonResult<ProteinResp> {
     log::debug!("/protein, args={:?}", args);
-    let limit: i32 = match args.limit {
-        Some(limit) => limit,
-        None => 10,
-    };
+    let limit: i32 = args.limit.unwrap_or(10);
 
     let mut result = get_related_protein_by_name(args.name, limit).await?;
 
@@ -90,6 +103,53 @@ pub async fn query_interact_of_protein_set(
     resp_ok(ProteinResp {
         protein_names: proteins,
         relate: rels,
+    })
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ProteinScoreArgs {
+    pub score: i32,
+    pub limit: Option<i32>,
+}
+
+pub async fn query_interact_path_by_score(
+    Query(args): Query<ProteinScoreArgs>,
+) -> JsonResult<ProteinPathResp> {
+    let limit = args.limit.unwrap_or(15);
+    let mut result = get_protein_path_by_score(args.score, limit).await?;
+
+    let mut proteins = HashMap::<i32, String>::new();
+    let mut rels = Vec::<Interact>::new();
+    while let Some(row) = result.next().await? {
+        let p: Path = row.get("p").expect("unexpect doesn't have a path");
+        let mut rel = Vec::new();
+        let mut score = String::new();
+        for node in p.nodes() {
+            if node.labels().contains(&"owl__Axiom".to_owned()) {
+                log::debug!(
+                    "node ns4__SWO_0000425 = {:?}",
+                    node.get::<String>("ns4__SWO_0000425")
+                );
+                score = node.get("ns4__SWO_0000425").unwrap_or("".to_owned());
+                continue;
+            }
+            log::debug!("query_interact_path_by_score a node={:?}", node);
+            proteins.insert(
+                node.id() as i32,
+                node.get("rdfs__label").unwrap_or("".to_owned()),
+            );
+            rel.push(node.id() as i32);
+        }
+        rels.push(Interact {
+            node1: rel[0],
+            node2: rel[1],
+            score: score.parse::<i32>().unwrap(),
+        })
+    }
+
+    resp_ok(ProteinPathResp {
+        protein_names: proteins,
+        rels: rels,
     })
 }
 
