@@ -12,6 +12,8 @@ pub enum AppErrorType {
     DefaultErr,
     #[display(fmt = "Neo4jErr")]
     Neo4jErr,
+    #[display(fmt = "ArgmentErr")]
+    ArgmentErr,
 }
 
 #[derive(Debug)]
@@ -37,7 +39,17 @@ impl AppError {
 impl From<neo4rs::Error> for AppError {
     fn from(e: neo4rs::Error) -> Self {
         info!("AppError from e=neo4rs::Error({:?})", e);
-        return Self::new(AppErrorType::Neo4jErr, format!("neo4rs::Error({:?})", e));
+        Self::new(AppErrorType::Neo4jErr, format!("neo4rs::Error({:?})", e))
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(e: serde_json::Error) -> Self {
+        log::info!("AppError from e=serde_json::Error({:?})", e);
+        Self::new(
+            AppErrorType::ArgmentErr,
+            format!("serde_json::Error({:?})", e),
+        )
     }
 }
 

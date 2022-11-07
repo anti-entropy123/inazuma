@@ -64,6 +64,35 @@ pub async fn query_protein_by_name(Query(args): Query<ProteinArgs>) -> JsonResul
     resp_ok(resp)
 }
 
+#[derive(Deserialize, Debug)]
+pub struct ProteinSetArgs {
+    pub proteins: String,
+}
+
+pub async fn query_interact_of_protein_set(
+    Query(args): Query<ProteinSetArgs>,
+) -> JsonResult<ProteinResp> {
+    let set: Vec<String> = args.proteins.split(",").map(|v| v.to_owned()).collect();
+
+    let mut proteins = HashMap::<i32, String>::new();
+    let mut rels = Vec::<(i32, i32)>::new();
+    for (id1, n1) in set.iter().enumerate() {
+        proteins.insert(id1 as i32, n1.to_owned());
+        for (id2, n2) in set.iter().enumerate() {
+            if n1 <= n2 {
+                continue;
+            }
+            if is_related_proteins(n1, n2).await? {
+                rels.push((id1 as i32, id2 as i32))
+            }
+        }
+    }
+    resp_ok(ProteinResp {
+        protein_names: proteins,
+        relate: rels,
+    })
+}
+
 pub async fn query_neo4j() -> JsonResult<Vec<String>> {
     let mut result = neo4j_query_test().await?;
 
