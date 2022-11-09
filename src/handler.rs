@@ -1,15 +1,15 @@
 use axum::extract::Query;
 use log::{error, info};
-use neo4rs::{Node, Path};
+use neo4rs::{Node, Path, RowStream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
     db::{
-        get_protein_path_by_score, get_related_protein_by_name, is_related_proteins,
-        neo4j_query_test,
+        get_protein_path_by_score, get_related_protein_by_name, get_shortest_path,
+        is_related_proteins, neo4j_query_test,
     },
-    err::AppErrorType,
+    err::{AppError, AppErrorType},
     resp::{resp_err, resp_ok, JsonResult},
 };
 
@@ -106,6 +106,44 @@ pub async fn query_interact_of_protein_set(
     })
 }
 
+async fn get_protein_path_from_neo4j_row_stream(
+    mut result: RowStream,
+) -> Result<(HashMap<i32, String>, Vec<Interact>), AppError> {
+    let mut proteins = HashMap::<i32, String>::new();
+    let mut rels = Vec::<Interact>::new();
+    while let Some(row) = result.next().await? {
+        // log::debug!("row={:?}", row);
+        let p: Path = row.get("p").expect("unexpect doesn't have a path");
+        let mut rel = Vec::new();
+        let mut scores: Vec<String> = Vec::new();
+        for node in p.nodes() {
+            if node.labels().contains(&"owl__Axiom".to_owned()) {
+                scores.push(node.get("ns4__SWO_0000425").unwrap_or("".to_owned()));
+                continue;
+            }
+            log::debug!("get_protein_path_from_neo4j_row_stream a node={:?}", node);
+            proteins.insert(
+                node.id() as i32,
+                node.get("rdfs__label").unwrap_or("".to_owned()),
+            );
+            rel.push(node.id() as i32);
+        }
+        for idx in 0..scores.len() {
+            match (rel.get(idx), rel.get(idx + 1), scores.get(idx)) {
+                (Some(node1), Some(node2), Some(score)) => {
+                    rels.push(Interact {
+                        node1: *node1,
+                        node2: *node2,
+                        score: score.parse::<i32>().unwrap(),
+                    });
+                }
+                _ => break,
+            }
+        }
+    }
+    return Ok((proteins, rels));
+}
+
 #[derive(Deserialize, Debug)]
 pub struct ProteinScoreArgs {
     pub score: i32,
@@ -116,40 +154,28 @@ pub async fn query_interact_path_by_score(
     Query(args): Query<ProteinScoreArgs>,
 ) -> JsonResult<ProteinPathResp> {
     let limit = args.limit.unwrap_or(15);
-    let mut result = get_protein_path_by_score(args.score, limit).await?;
-
-    let mut proteins = HashMap::<i32, String>::new();
-    let mut rels = Vec::<Interact>::new();
-    while let Some(row) = result.next().await? {
-        let p: Path = row.get("p").expect("unexpect doesn't have a path");
-        let mut rel = Vec::new();
-        let mut score = String::new();
-        for node in p.nodes() {
-            if node.labels().contains(&"owl__Axiom".to_owned()) {
-                log::debug!(
-                    "node ns4__SWO_0000425 = {:?}",
-                    node.get::<String>("ns4__SWO_0000425")
-                );
-                score = node.get("ns4__SWO_0000425").unwrap_or("".to_owned());
-                continue;
-            }
-            log::debug!("query_interact_path_by_score a node={:?}", node);
-            proteins.insert(
-                node.id() as i32,
-                node.get("rdfs__label").unwrap_or("".to_owned()),
-            );
-            rel.push(node.id() as i32);
-        }
-        rels.push(Interact {
-            node1: rel[0],
-            node2: rel[1],
-            score: score.parse::<i32>().unwrap(),
-        })
-    }
-
+    let result = get_protein_path_by_score(args.score, limit).await?;
+    let (proteins, rels) = get_protein_path_from_neo4j_row_stream(result).await?;
     resp_ok(ProteinPathResp {
         protein_names: proteins,
-        rels: rels,
+        rels,
+    })
+}
+
+#[derive(Deserialize)]
+pub struct ShortestPathArgs {
+    pub source_protein: String,
+    pub target_protein: String,
+}
+
+pub async fn query_shortest_path(
+    Query(args): Query<ShortestPathArgs>,
+) -> JsonResult<ProteinPathResp> {
+    let result = get_shortest_path(&args.source_protein, &args.target_protein).await?;
+    let (proteins, rels) = get_protein_path_from_neo4j_row_stream(result).await?;
+    resp_ok(ProteinPathResp {
+        protein_names: proteins,
+        rels,
     })
 }
 

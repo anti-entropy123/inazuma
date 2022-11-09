@@ -49,12 +49,18 @@ pub async fn get_protein_path_by_score(score: i32, limit: i32) -> Result<RowStre
     Ok(result)
 }
 
+pub async fn get_shortest_path(protein1: &str, protein2: &str) -> Result<RowStream, AppError> {
+    let cyper = format!("match (a:owl__Class) where a.rdfs__label in ['{}', '{}'] with collect(id(a)) as nodeIds call gds.shortestPath.dijkstra.stream('dijk1', {{sourceNode:nodeIds[0], TargetNode:nodeIds[1]}}) yield sourceNode, targetNode, path return path as p;", protein1, protein2);
+    log::debug!("get_shortest_path qeury sentence={}", cyper);
+    let graph = get_graph_connect().await?;
+    let result = graph.execute(query(&cyper)).await?;
+    Ok(result)
+}
+
 pub async fn neo4j_query_test() -> Result<RowStream, AppError> {
     let cyper = format!("MATCH (n:Resource) RETURN n LIMIT 25");
     log::debug!("neo4j_query_test qeury sentence={}", cyper);
-
     let graph = get_graph_connect().await?;
     let result = graph.execute(query(&cyper)).await?;
-
     Ok(result)
 }
