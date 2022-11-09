@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::{
     db::{
         get_protein_path_by_score, get_related_protein_by_name, get_shortest_path,
-        is_related_proteins, neo4j_query_test,
+        get_similar_proteins, is_related_proteins, neo4j_query_test,
     },
     err::{AppError, AppErrorType},
     resp::{resp_err, resp_ok, JsonResult},
@@ -179,9 +179,41 @@ pub async fn query_shortest_path(
     })
 }
 
+#[derive(Deserialize)]
+pub struct QuerySimilarityArgs {
+    pub protein_num: i32,
+    pub top_k: i32,
+}
+
+#[derive(Serialize)]
+pub struct ProteinSimilarity {
+    pub name1: String,
+    pub name2: String,
+    pub similarity: f64,
+}
+
+pub async fn query_similarity_proteins(
+    Query(args): Query<QuerySimilarityArgs>,
+) -> JsonResult<Vec<ProteinSimilarity>> {
+    let mut result = get_similar_proteins(args.top_k, args.protein_num).await?;
+    let mut resp = Vec::new();
+    while let Some(row) = result.next().await? {
+        let name1 = row.get::<String>("name1").expect("should have name1");
+        let name2 = row.get::<String>("name2").expect("should have name2");
+        let similarity = row
+            .get::<f64>("similarity")
+            .expect("should have similarity");
+        resp.push(ProteinSimilarity {
+            name1,
+            name2,
+            similarity,
+        });
+    }
+    resp_ok(resp)
+}
+
 pub async fn query_neo4j() -> JsonResult<Vec<String>> {
     let mut result = neo4j_query_test().await?;
-
     let mut resp: Vec<String> = Vec::new();
     while let Some(row) = result.next().await? {
         if let Some(node) = row.get::<Node>("n") {
@@ -195,7 +227,6 @@ pub async fn query_neo4j() -> JsonResult<Vec<String>> {
             );
         }
     }
-
     resp_ok(resp)
 }
 

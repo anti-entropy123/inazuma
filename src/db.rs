@@ -21,10 +21,16 @@ pub async fn get_graph_connect() -> Result<&'static Arc<Graph>, AppError> {
         .await)
 }
 
+async fn common_query_neo4j(cyper: String, log_name: &str) -> Result<RowStream, AppError> {
+    log::debug!("{} qeury sentence={}", log_name, cyper);
+    let graph = get_graph_connect().await?;
+    let result = graph.execute(query(&cyper)).await?;
+    Ok(result)
+}
+
 pub async fn get_related_protein_by_name(name: String, limit: i32) -> Result<RowStream, AppError> {
     let cyper = format!("MATCH (n1:owl__Class) -[r*2]- (n2:owl__Class{{rdfs__label:'{}'}}) Return n1, n2, r Limit {} ;", name, limit);
     log::debug!("get_related_protein_by_name qeury sentence={}", cyper);
-
     let graph = get_graph_connect().await?;
     let result = graph.execute(query(&cyper)).await?;
 
@@ -55,6 +61,11 @@ pub async fn get_shortest_path(protein1: &str, protein2: &str) -> Result<RowStre
     let graph = get_graph_connect().await?;
     let result = graph.execute(query(&cyper)).await?;
     Ok(result)
+}
+
+pub async fn get_similar_proteins(topk: i32, proteins_num: i32) -> Result<RowStream, AppError> {
+    let cyper = format!("CALL gds.knn.stream('proj', {{nodeLabels:['owl__Class'], nodeProperties:['embedding'], topK:{}}}) YIELD  node1, node2, similarity RETURN gds.util.asNode(node1).rdfs__label AS name1, gds.util.asNode(node2).rdfs__label AS name2, similarity LIMIT {}", topk ,topk * proteins_num);
+    common_query_neo4j(cyper, "get_similar_proteins").await
 }
 
 pub async fn neo4j_query_test() -> Result<RowStream, AppError> {
