@@ -9,8 +9,8 @@ mod resp;
 
 use err::AppError;
 use handler::{
-    get_error, query_interact_of_protein_set, query_interact_path_by_score, query_neo4j,
-    query_protein_by_name, query_shortest_path, query_similarity_proteins,
+    get_error, query_degree_top_k, query_interact_of_protein_set, query_interact_path_by_score,
+    query_neo4j, query_protein_by_name, query_shortest_path, query_similarity_proteins,
 };
 
 #[tokio::main]
@@ -27,6 +27,7 @@ async fn main() -> std::io::Result<()> {
         .route("/interact_path", get(query_interact_path_by_score))
         .route("/shortest_path", get(query_shortest_path))
         .route("/similar_proteins", get(query_similarity_proteins))
+        .route("/degree_top_k", get(query_degree_top_k))
         .route("/error", get(get_error))
         .layer(CorsLayer::permissive());
 

@@ -17,6 +17,7 @@ log = "*"
 env_logger = "*"
 derive_more = "*"
 tower-http = { version = "*", features = ["cors"] }
+function_name = "*"
 
 [dependencies.uuid]
 version = "1.2.1"

@@ -1,4 +1,5 @@
 use axum::extract::Query;
+use function_name::named;
 use log::{error, info};
 use neo4rs::{Node, Path, RowStream};
 use serde::{Deserialize, Serialize};
@@ -6,8 +7,8 @@ use std::collections::HashMap;
 
 use crate::{
     db::{
-        get_protein_path_by_score, get_related_protein_by_name, get_shortest_path,
-        get_similar_proteins, is_related_proteins, neo4j_query_test,
+        get_degree_top_k, get_protein_path_by_score, get_related_protein_by_name,
+        get_shortest_path, get_similar_proteins, is_related_proteins, neo4j_query_test,
     },
     err::{AppError, AppErrorType},
     resp::{resp_err, resp_ok, JsonResult},
@@ -106,6 +107,7 @@ pub async fn query_interact_of_protein_set(
     })
 }
 
+#[named]
 async fn get_protein_path_from_neo4j_row_stream(
     mut result: RowStream,
 ) -> Result<(HashMap<i32, String>, Vec<Interact>), AppError> {
@@ -121,7 +123,7 @@ async fn get_protein_path_from_neo4j_row_stream(
                 scores.push(node.get("ns4__SWO_0000425").unwrap_or("".to_owned()));
                 continue;
             }
-            log::debug!("get_protein_path_from_neo4j_row_stream a node={:?}", node);
+            log::debug!("{} a node={:?}", function_name!(), node);
             proteins.insert(
                 node.id() as i32,
                 node.get("rdfs__label").unwrap_or("".to_owned()),
@@ -208,6 +210,31 @@ pub async fn query_similarity_proteins(
             name2,
             similarity,
         });
+    }
+    resp_ok(resp)
+}
+
+#[derive(Deserialize)]
+pub struct QueryDegreeArgs {
+    pub top_k: i32,
+}
+
+#[derive(Serialize)]
+pub struct DegreeItem {
+    pub name: String,
+    pub number: f64,
+}
+
+pub async fn query_degree_top_k(
+    Query(args): Query<QueryDegreeArgs>,
+) -> JsonResult<Vec<DegreeItem>> {
+    let mut result = get_degree_top_k(args.top_k).await?;
+    let mut resp = Vec::new();
+    while let Some(row) = result.next().await? {
+        resp.push(DegreeItem {
+            name: row.get::<String>("name").expect("should have name"),
+            number: row.get::<f64>("number").expect("should have number"),
+        })
     }
     resp_ok(resp)
 }
